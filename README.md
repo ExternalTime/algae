@@ -12,14 +12,22 @@ empty keyboard and slowly placing characters on it in order of frequency.
 This process can be visualised as a tree with each inner node being an
 incomplete layout and it's ancestors being all layouts that can be
 generated from it.
+
 With this approach and proper handling of symmetries one discard a lot
 of bad layouts at once, which makes exhaustive search for some metrics
 feasible.
 
 ## Cons
+
 ### Approach
 Obviously this approach has some flaws. For some metrics exhaustive
 search would take way too long.
+
 ### Current Implementation
 Only handles linear score function.
 Uses const generics everywhere.
+
+## How to use
+Define whatever metrics you want, pack them into supplied Analyzer struct
+and pass them to generator. The layout format I supplied is just there to
+prove that this generator works, so you might want to use different one.
