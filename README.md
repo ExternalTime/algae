@@ -16,7 +16,7 @@ With cargo:
 cargo run -- --precalculated --file monkeyracer_sfbs.json --cutoff 0.006
 
 Without `--file` the weights / corpus is loaded through stdio. Without
-``--precalculated` generator calcualtes weights based on provided text as `4 *
+`--precalculated` generator calcualtes weights based on provided text as `4 *
 sfbs + dsfbs`. `--alphabet` sets (if none is present) or overrides characters
 placed on a keyboard.
 
@@ -24,7 +24,7 @@ placed on a keyboard.
 
 To make exhaustive search feasible we are using two optimizations.
 
-First, we are exploting various symmetries. We don't distinguish between layouts
+First, we are exploiting various symmetries. We don't distinguish between layouts
 with columns swapped or with keys swapped inside a column.
 
 Second, instead of trying to go through all possible layouts ony by one, we look
