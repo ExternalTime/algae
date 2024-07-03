@@ -65,11 +65,13 @@ fn actually_generate(gen: &mut Generator) {
     let mut next = 0;
     let mut max = 0;
     loop {
+        // Tried all positions for a letter. Going back to the previous letter.
         if 8 <= next {
             let Some((c, _)) = stack.pop() else {
                 break;
             };
-            //next = c + 1;
+            // If last column was empty, we skip the ones of the same size (they
+            // are empty too). Otherwise, we just continue to the next one.
             next = match (is_empty(&stack, c), c) {
                 (false, _) => c + 1,
                 (true, 0..=1) => 2,
@@ -78,8 +80,10 @@ fn actually_generate(gen: &mut Generator) {
             };
             continue;
         }
+        // Layout is complete.
         if 30 <= stack.len() {
             gen.found(&stack);
+            // Last key has only one valid position.
             stack.pop();
             next = 8;
             continue;
@@ -99,6 +103,7 @@ fn actually_generate(gen: &mut Generator) {
 }
 
 pub fn generate(mut alphabet: [char; 30], bigrams: HashMap<[char; 2], u64>, cutoff: f64) {
+    // placing more common letters early allows for earlier pruning.
     alphabet.sort_by_cached_key(|c| {
         std::cmp::Reverse(
             bigrams
