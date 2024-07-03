@@ -1,4 +1,4 @@
-# Another layout generator
+# Algae - Another layout generator
 
 This is hopefully last rewrite of my generator. This time I cut everything I
 could out of it. I could have made it shorter, but I've decided to also try
@@ -13,7 +13,8 @@ language into it, so I wrote a "json parser" to read bigram weights from a file.
 ## Example usage
 
 With cargo:
-cargo run -- --precalculated --file monkeyracer_sfbs.json --cutoff 0.006
+
+`cargo run -- --precalculated --file monkeyracer_sfbs.json --cutoff 0.006`
 
 Without `--file` the weights / corpus is loaded through stdio. Without
 `--precalculated` generator calcualtes weights based on provided text as `4 *
@@ -24,8 +25,8 @@ placed on a keyboard.
 
 To make exhaustive search feasible we are using two optimizations.
 
-First, we are exploiting various symmetries. We don't distinguish between layouts
-with columns swapped or with keys swapped inside a column.
+First, we are exploiting various symmetries. We don't distinguish between
+layouts with columns swapped or with keys swapped inside a column.
 
 Second, instead of trying to go through all possible layouts ony by one, we look
 at groups of layouts instead. Specifically, we place characters on a keyboard
