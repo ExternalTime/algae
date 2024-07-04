@@ -63,7 +63,6 @@ fn is_empty(layout: &[(u8, u64)], col: u8) -> bool {
 fn actually_generate(gen: &mut Generator) {
     let mut stack = Vec::with_capacity(30);
     let mut next = 0;
-    let mut max = 0;
     loop {
         // Tried all positions for a letter. Going back to the previous letter.
         if 8 <= next {

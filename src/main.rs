@@ -14,7 +14,7 @@ pub struct Args {
     precalculated: bool,
 }
 
-const HELP: &'static str = r#"unknown option. Valid options:
+const HELP: &str = r#"unknown option. Valid options:
 --cutoff [cutoff]     - specifies score cutoff for generated layouts. Must be in range [0.0, 1.0).
 --precalculated       - indicates that weights are supplied precalculated and stored in json format.
 --file [path]         - indicates to get weights from a file instead of stdio.
@@ -39,7 +39,7 @@ fn parse_args() -> Result<Args, Box<dyn Error>> {
             "--cutoff" => cutoff = iter.next().unwrap_or("1.0".to_owned()).parse::<f64>()?,
             "--precalculated" => precalculated = true,
             "--file" => file = Some(iter.next().unwrap_or("weights.json".to_owned())),
-            "--alphabet" => alphabet = Some(parse_alphabet(&iter.next().unwrap_or(String::new()))?),
+            "--alphabet" => alphabet = Some(parse_alphabet(&iter.next().unwrap_or_default())?),
             _ => return Err(HELP.into()),
         }
     }
@@ -64,7 +64,7 @@ fn generate(args: Args) -> Result<(), Box<dyn Error>> {
     };
     let (alphabet, weights) = match args.precalculated {
         true => parser::parse(weights).map_err(|e| e.to_string())?,
-        false => (None, corpus::weights(&weights)),
+        false => (None, corpus::weights(weights)),
     };
     let alphabet = args.alphabet.or(alphabet).ok_or("missing alphabet")?;
     println!("weights loaded");

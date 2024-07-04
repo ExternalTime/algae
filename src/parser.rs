@@ -191,8 +191,8 @@ impl<'a> Parser<'a> {
     }
 }
 
-pub fn parse<'a>(
-    str: &'a str,
+pub fn parse(
+    str: &'_ str,
 ) -> std::result::Result<(Option<[char; 30]>, HashMap<[char; 2], u64>), impl std::fmt::Display> {
     let mut parser = Parser {
         str,
