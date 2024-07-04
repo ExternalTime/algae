@@ -1,6 +1,6 @@
 {
   "alphabet": "abcdefghijklmnopqrstuvwxyz,./'",
-  "bigrams": {
+  "weights": {
     "th": 47225,
     "he": 40028,
     "in": 32701,

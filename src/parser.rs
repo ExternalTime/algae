@@ -12,146 +12,119 @@ struct Parser<'a> {
     pos: Position,
 }
 
-#[derive(Debug)]
-pub struct ParseError<'a> {
-    str: &'a str,
-    pos: Position,
-    message: std::borrow::Cow<'static, str>,
-}
-
-impl<'a> std::fmt::Display for ParseError<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "{}", self.message)?;
-        let start = self.str[..self.pos.offset]
-            .rfind('\n')
-            .map(|x| x + 1)
-            .unwrap_or(0);
-        let end = self.str[self.pos.offset..]
-            .find('\n')
-            .map(|x| self.pos.offset + x)
-            .unwrap_or(self.str.len());
-        writeln!(f, "{} | {}", self.pos.line + 1, &self.str[start..end])?;
-        for _ in 0..self.pos.line.checked_ilog10().unwrap_or(0) + 1 + 3 {
-            write!(f, " ")?;
-        }
-        for char in self.str[start..self.pos.offset].chars() {
-            match char.is_whitespace() {
-                true => write!(f, "{char}")?,
-                false => write!(f, " ")?,
-            }
-        }
-        writeln!(f, "^")
+fn err_to_string(err: Cow<str>, source: &str, pos: Position) -> String {
+    let mut message = err.into_owned();
+    let start = source[..pos.offset].rfind('\n').map(|x| x + 1).unwrap_or(0);
+    let end = source[pos.offset..]
+        .find('\n')
+        .map(|x| pos.offset + x)
+        .unwrap_or(source.len());
+    message.push('\n');
+    message.push_str(pos.line.to_string().as_str());
+    message.push_str(" | ");
+    message.push_str(source[start..end].trim_end());
+    message.push('\n');
+    for _ in 0..pos.line.checked_ilog10().unwrap_or(0) + 1 + 3 {
+        message.push(' ');
     }
+    for char in source[start..pos.offset].chars() {
+        message.push(match char.is_whitespace() {
+            true => char,
+            false => ' ',
+        });
+    }
+    message.push('^');
+    message
 }
 
-impl<'a> std::error::Error for ParseError<'a> {}
+type Result<T> = std::result::Result<T, Cow<'static, str>>;
 
-type Result<'a, T> = std::result::Result<T, ParseError<'a>>;
 impl<'a> Parser<'a> {
-    fn err<E: Into<Cow<'static, str>>>(&self, message: E) -> ParseError<'a> {
-        ParseError {
-            str: self.str,
-            pos: self.pos,
-            message: message.into(),
-        }
-    }
-
     fn rem(&self) -> &'a str {
         &self.str[self.pos.offset..]
     }
 
-    fn next<T>(&mut self, f: impl FnOnce(&mut Self, char) -> Result<'a, T>) -> Result<'a, T> {
-        self.rem()
-            .chars()
-            .next()
-            .ok_or_else(|| self.err("unexpected end of file"))
-            .and_then(|c| {
-                f(self, c).inspect(|_| {
-                    self.pos.offset += c.len_utf8();
-                    if c == '\n' {
-                        self.pos.line += 1;
-                    }
-                })
-            })
+    fn peek(&self) -> Option<char> {
+        self.rem().chars().next()
+    }
+
+    fn advance(&mut self) -> Option<char> {
+        self.peek().inspect(|&c| {
+            self.pos.offset += c.len_utf8();
+            if c == '\n' {
+                self.pos.line += 1;
+            }
+        })
     }
 
     fn skip_whitespace(&mut self) {
-        while self
-            .next(|s, c| match c.is_ascii_whitespace() {
-                true => Ok(()),
-                false => Err(s.err("")),
-            })
-            .is_ok()
-        {}
-    }
-
-    fn atoken(&mut self, str: &str) -> Result<'a, ()> {
-        match self.rem().starts_with(str) {
-            true => Ok(self.pos.offset += str.len()),
-            false => Err(self.err(format!("expected \"{}\"", str.escape_debug()))),
+        while self.peek().is_some_and(|c| c.is_ascii_whitespace()) {
+            self.advance();
         }
     }
 
-    fn token(&mut self, str: &str) -> Result<'a, ()> {
+    fn atoken(&mut self, str: &str) -> Result<()> {
+        match self.rem().starts_with(str) {
+            true => Ok(self.pos.offset += str.len()),
+            false => Err(format!("expected \"{}\"", str.escape_debug()).into()),
+        }
+    }
+
+    fn token(&mut self, str: &str) -> Result<()> {
         self.skip_whitespace();
         self.atoken(str)
     }
 
-    fn char_array(&mut self) -> Result<'a, Vec<char>> {
+    fn char_array(&mut self) -> Result<Vec<char>> {
         self.token("\"")
-            .map_err(|_| self.err("expected a string (enclosed in quotes)"))?;
+            .map_err(|_| Cow::Borrowed("expected a string (enclosed in quotes)"))?;
         let mut chars = Vec::new();
-        loop {
-            if self.atoken("\"").is_ok() {
-                break;
-            }
+        while self.atoken("\"").is_err() {
             let escaped = self.atoken("\\").is_ok();
-            self.next(|s, c| match (escaped, c) {
-                (false, '\n') => Err(s.err("missing closing '\"'")),
+            let c = self.peek().ok_or(Cow::Borrowed("missing closing '\"'"))?;
+            match (escaped, c) {
+                (false, '\n') => return Err("missing closing '\"'".into()),
                 (false, c) | (true, c @ ('\\' | '"')) => {
                     chars.push(c);
-                    Ok(false)
+                    self.advance();
                 }
-                (true, c) => Err(s.err(format!("\\'{c}' is not a valid escape"))),
-            })?;
+                (true, c) => return Err(format!("\\'{c}' is not a valid escape").into()),
+            };
         }
         Ok(chars)
     }
 
-    fn number(&mut self) -> Result<'a, u64> {
-        let tmp = self.pos;
+    fn number(&mut self) -> Result<u64> {
         self.skip_whitespace();
-        let mut n = 0u64;
-        let mut digit = &mut |s: &mut Self, c: char| {
-            let d = c
-                .to_digit(10)
-                .ok_or_else(|| s.err("expected number"))?
-                .into();
+        let start_pos = self.pos;
+        let next_digit = |s: &mut Self| s.peek().and_then(|c| c.to_digit(10).map(u64::from));
+        let mut n = next_digit(self).ok_or("expected a number")?;
+        self.advance();
+        while let Some(d) = next_digit(self) {
             n = n
                 .checked_mul(10)
                 .and_then(|n| n.checked_add(d))
-                .ok_or(s.err("number too big!"))?;
-            Ok(())
-        };
-        self.next(&mut digit).inspect_err(|_| self.pos = tmp)?;
-        while self.next(&mut digit).is_ok() {}
+                .ok_or("number too big")
+                .inspect_err(|_| self.pos = start_pos)?;
+            self.advance();
+        }
         Ok(n)
     }
 
-    fn weight(&mut self, map: &mut HashMap<[char; 2], u64>) -> Result<'a, ()> {
-        let tmp = self.pos;
+    fn weight(&mut self, map: &mut HashMap<[char; 2], u64>) -> Result<()> {
+        let pos = self.pos;
         let Entry::Vacant(e) = map.entry(self.char_array()?.try_into().map_err(|v: Vec<_>| {
-            self.err(format!("bigram should have 2 characters, not {}", v.len()))
+            Cow::Owned(format!("bigram should have 2 characters, not {}", v.len()))
         })?) else {
-            self.pos = tmp;
-            return Err(self.err("duplicate bigram"));
+            self.pos = pos;
+            return Err("duplicate bigram".into());
         };
         self.token(":")?;
         e.insert(self.number()?);
         Ok(())
     }
 
-    fn weights(&mut self) -> Result<'a, HashMap<[char; 2], u64>> {
+    fn weights(&mut self) -> Result<HashMap<[char; 2], u64>> {
         let mut map = HashMap::new();
         self.token("{")?;
         if self.token("}").is_ok() {
@@ -162,36 +135,58 @@ impl<'a> Parser<'a> {
             if self.token("}").is_ok() {
                 return Ok(map);
             } else if self.token(",").is_err() {
-                return Err(self.err("expected '}' or ','"));
+                return Err("expected '}' or ','".into());
             }
         }
     }
 
-    fn parse(&mut self) -> Result<'a, (Option<[char; 30]>, HashMap<[char; 2], u64>)> {
+    fn alphabet(&mut self) -> Result<[char; 30]> {
+        self.char_array()?.try_into().map_err(|v: Vec<_>| {
+            format!("alphabet should have 30 characters, not {}", v.len()).into()
+        })
+    }
+
+    fn parse(&mut self) -> Result<(Option<[char; 30]>, HashMap<[char; 2], u64>)> {
         self.token("{")?;
-        let mut alphabet = None;
-        if self.token("\"alphabet\"").is_ok() {
-            self.token(":")?;
-            alphabet = self
-                .char_array()?
-                .try_into()
-                .map(Some)
-                .map_err(|v: Vec<_>| {
-                    self.err(format!(
-                        "alphabet should have 30 characters, not {}",
-                        v.len()
-                    ))
-                })?;
-            self.token(",")?;
+        let pos = self.pos;
+        if self.token("}").is_ok() {
+            self.pos = pos;
+            return Err("weights are not defined".into());
         }
-        self.token("\"bigrams\"")?;
-        self.token(":")?;
-        let weights = self.weights()?;
-        self.token("}")?;
-        self.skip_whitespace();
-        match self.rem().is_empty() {
-            true => Ok((alphabet, weights)),
-            false => Err(self.err("expected end of file")),
+        let mut alphabet = None;
+        let mut weights = None;
+        loop {
+            self.skip_whitespace();
+            let pos = self.pos;
+            if self.token(r#""alphabet""#).is_ok() {
+                if alphabet.is_some() {
+                    self.pos = pos;
+                    return Err("duplicate alphabet definition".into());
+                }
+                self.token(":")?;
+                alphabet = self.alphabet().map(Some)?;
+            } else if self.token(r#""weights""#).is_ok() {
+                if weights.is_some() {
+                    self.pos = pos;
+                    return Err("duplicate weights definition".into());
+                }
+                self.token(":")?;
+                weights = self.weights().map(Some)?;
+            } else {
+                return Err("expected either either alphabet or weights".into());
+            }
+            if self.token("}").is_ok() {
+                let Some(weights) = weights else {
+                    return Err("weights are not defined".into());
+                };
+                self.skip_whitespace();
+                return match self.rem().is_empty() {
+                    true => Ok((alphabet, weights)),
+                    false => Err("expected end of file".into()),
+                };
+            } else if self.token(",").is_err() {
+                return Err("expected ',' or '}'".into());
+            }
         }
     }
 }
@@ -203,5 +198,7 @@ pub fn parse<'a>(
         str,
         pos: Position { line: 0, offset: 0 },
     };
-    parser.parse().map_err(|e| e.to_string())
+    parser
+        .parse()
+        .map_err(|e| err_to_string(e, str, parser.pos))
 }
