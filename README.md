@@ -1,20 +1,26 @@
 # Algae - Another layout generator
 
+Logical keyboard layout generator. Finds *all* keyboard layouts (or rather sets
+of columns) with (d)sfbs below a chosen threshold. For low thresholds does its
+job nearly instantly. Should work well as a way to filter out layouts on which
+to run slower analyzers (for example ones that use (d)sfb distance instead).
+
 This is hopefully last rewrite of my generator. This time I cut everything I
 could out of it. I could have made it shorter, but I've decided to also try
-usign 0 dependencies, which came out surprisingly well (did not result in
+using 0 dependencies, which came out surprisingly well (did not result in
 a disaster).
 
-Like my first version (which was unusable by anyone but me) this generator
-focuses on exhaustive search of keyboard layouts with low sfbs. I wanted this
-generator to be usable with custom metrics and didn't want to embed a custom
-language into it, so I wrote a "json parser" to read bigram weights from a file.
+While this generator *can* calculate weights of bigrams by itself, I strongly
+recommend supplying your own weights. I made sure the calculated weights aren't
+super bad, but don't expect more.
 
 ## Example usage
 
 With cargo:
 
-`cargo run -- --precalculated --file monkeyracer_sfbs.json --cutoff 0.006`
+```sh
+cargo run -- --precalculated --file monkeyracer_sfbs.json --cutoff 0.006
+```
 
 Without `--file` the weights / corpus is loaded through stdio. Without
 `--precalculated` generator calcualtes weights based on provided text as `4 *
@@ -34,7 +40,6 @@ in order of frequency untill we get complete layout or we cross the cutoff, at
 which point the whole group gets pruned. Because it's impossible for a layout
 to have less sfbs after adding another letter to it, we can be sure that all
 layouts we skip are above the cutoff point.
-
 
 ## Fun stats
 
