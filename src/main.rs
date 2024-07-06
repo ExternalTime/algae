@@ -68,7 +68,15 @@ fn generate(args: Args) -> Result<(), Box<dyn Error>> {
     };
     let alphabet = args.alphabet.or(alphabet).ok_or("missing alphabet")?;
     println!("weights loaded");
-    generation::generate(alphabet, weights, args.cutoff);
+    for (layout, score) in generation::generator(alphabet, weights, args.cutoff) {
+        println!("found layout with score {score}");
+        for (i, c) in layout.into_iter().enumerate() {
+            print!("{c}{}", match i % 10 {
+                9 => '\n',
+                _ => ' ',
+            });
+        }
+    }
     Ok(())
 }
 

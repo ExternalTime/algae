@@ -4,104 +4,97 @@ struct Generator {
     weights: [[u64; 30]; 30],
     encoding: [char; 30],
     cutoff: u64,
-    total: u64,
-}
-
-fn in_col(layout: &[(u8, u64)], col: u8) -> impl Iterator<Item = usize> + '_ {
-    layout
-        .iter()
-        .map(|(c, _)| c)
-        .enumerate()
-        .filter_map(move |(i, c)| (*c == col).then_some(i))
+    total: f64,
+    stack: Vec<(u8, u64)>,
+    next: u8,
 }
 
 impl Generator {
-    fn step_score(&self, tail: &[(u8, u64)], col: u8) -> u64 {
-        let tmp = &self.weights[tail.len()];
-        in_col(tail, col).map(|i| tmp[i]).sum()
+    fn keys(&self) -> impl Iterator<Item = (usize, u8)> + '_ {
+        self.stack.iter()
+            .map(|(c, _)| *c)
+            .enumerate()
     }
 
-    fn found(&mut self, layout: &[(u8, u64)]) {
-        let score = layout.last().unwrap().1;
-        //self.cutoff = score;
-        let score = score as f64 / self.total as f64;
-        println!("Found layout with score {score}");
+    fn next_col(&self) -> impl Iterator<Item = usize> + '_ {
+        self.keys()
+            .filter_map(|(key, col)| (col == self.next).then_some(key))
+    }
 
-        // Converting columns into "layout"
-        let mut layout: Vec<(usize, u8)> = layout.iter().map(|(col, _)| *col).enumerate().collect();
-        layout.sort_by_key(|(_, col)| *col);
-        let layout: Vec<_> = layout.into_iter().map(|(char, _)| char).collect();
+    fn next_full(&self) -> bool {
+        (if self.next < 2 { 6 } else { 3 }) <= self.next_col().count()
+    }
+
+    fn next_empty(&self) -> bool {
+        self.next_col().next().is_none()
+    }
+
+    fn score(&self) -> u64 {
+        self.stack.last().map(|(_, score)| *score).unwrap_or(0)
+    }
+
+    fn step_score(&self) -> u64 {
+        self.next_col()
+            .map(|c| self.weights[self.stack.len()][c])
+            .sum()
+    }
+
+    fn cutoff(&self) -> u64 {
+        self.cutoff
+    }
+
+    fn try_complete(&self) -> Option<[char; 30]> {
+        if self.stack.len() < 30 {
+            return None;
+        }
+        let mut layout: [_; 30] = std::array::from_fn(|i| (self.stack[i].0, self.encoding[i]));
+        layout.sort_by_key(|(col, _)| *col);
         #[rustfmt::skip]
         let translation: [_; 30] = [
             25, 22, 13,  7, 10,   4,  1, 16, 19, 28,
             24, 21, 12,  6,  9,   3,  0, 15, 18, 27,
             26, 23, 14,  8, 11,   5,  2, 17, 20, 29,
         ];
-        for i in 0..30 {
-            print!("{}", self.encoding[layout[translation[i]]]);
-            if i % 10 == 9 {
-                println!();
-            } else {
-                print!(" ");
-            }
-        }
-    }
-
-    fn cutoff(&self) -> u64 {
-        self.cutoff
+        Some(std::array::from_fn(|i| layout[translation[i]].1))
     }
 }
 
-fn is_full(layout: &[(u8, u64)], col: u8) -> bool {
-    (if col < 2 { 6 } else { 3 }) <= in_col(layout, col).count()
-}
-
-fn is_empty(layout: &[(u8, u64)], col: u8) -> bool {
-    in_col(layout, col).next().is_none()
-}
-
-fn actually_generate(gen: &mut Generator) {
-    let mut stack = Vec::with_capacity(30);
-    let mut next = 0;
-    loop {
+impl Iterator for Generator {
+    type Item = ([char; 30], f64);
+    fn next(&mut self) -> Option<Self::Item> {
         // Tried all positions for a letter. Going back to the previous letter.
-        if 8 <= next {
-            let Some((c, _)) = stack.pop() else {
-                break;
-            };
+        if 8 <= self.next {
+            self.next = self.stack.pop()?.0;
             // If last column was empty, we skip the ones of the same size (they
             // are empty too). Otherwise, we just continue to the next one.
-            next = match (is_empty(&stack, c), c) {
-                (false, _) => c + 1,
+            self.next = match (self.next_empty(), self.next) {
+                (false, _) => self.next + 1,
                 (true, 0..=1) => 2,
                 (true, 2..=7) => 8,
                 (true, 8..) => unreachable!(),
             };
-            continue;
+            return self.next();
         }
-        // Layout is complete.
-        if 30 <= stack.len() {
-            gen.found(&stack);
+        if let Some(layout) = self.try_complete() {
+            let score = self.score() as f64 / self.total;
             // Last key has only one valid position.
-            stack.pop();
-            next = 8;
-            continue;
+            self.stack.pop();
+            self.next = 8;
+            return Some((layout, score));
         }
-        let score = stack
-            .last()
-            .map(|(_, w)| *w)
-            .unwrap_or(0)
-            .saturating_add(gen.step_score(&stack, next));
-        if is_full(&stack, next) || gen.cutoff() <= score {
-            next += 1;
-            continue;
+        let score = self.score().saturating_add(self.step_score());
+        if self.next_full() || self.cutoff() <= score {
+            self.next += 1;
+            return self.next();
         }
-        stack.push((next, score));
-        next = 0;
+        self.stack.push((self.next, score));
+        self.next = 0;
+        return self.next();
     }
 }
 
-pub fn generate(mut alphabet: [char; 30], bigrams: HashMap<[char; 2], u64>, cutoff: f64) {
+
+pub fn generator(mut alphabet: [char; 30], bigrams: HashMap<[char; 2], u64>, cutoff: f64) -> impl Iterator<Item = ([char; 30], f64)> {
     // placing more common letters early allows for earlier pruning.
     alphabet.sort_by_cached_key(|c| {
         std::cmp::Reverse(
@@ -123,20 +116,19 @@ pub fn generate(mut alphabet: [char; 30], bigrams: HashMap<[char; 2], u64>, cuto
             weights[i][j] = w;
             weights[j][i] = w;
             let Some(tmp) = total.checked_add(w) else {
-                println!("sum of all weights is higher than {} (u64::MAX)", u64::MAX);
-                return;
+                panic!("sum of all weights is higher than {} (u64::MAX)", u64::MAX);
             };
             total = tmp;
         }
     }
-    let cutoff = (total as f64 * cutoff) as u64;
-    println!("Generator set up. Starting.");
-    let mut generator = Generator {
+    let total = total as f64;
+    let cutoff = (total * cutoff) as u64;
+    Generator {
         weights,
         encoding,
         cutoff,
         total,
-    };
-    actually_generate(&mut generator);
-    println!("Finished.");
+        stack: Vec::new(),
+        next: 0,
+    }
 }
