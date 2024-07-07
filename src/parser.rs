@@ -75,11 +75,23 @@ impl<'a> Parser<'a> {
         self.atoken(str)
     }
 
+    fn unicode_escape(&mut self) -> Result<char> {
+        self.advance();
+        let mut n = 0u32;
+        for _ in 0..4 {
+            n = n * 16 + self.advance()
+                .and_then(|c| c.to_digit(16))
+                .ok_or(Cow::Borrowed("invalid \\u escape"))?;
+        }
+        char::from_u32(n).ok_or("surrogates not currently supported".into())
+    }
+
     fn char_array(&mut self) -> Result<Vec<char>> {
         self.token("\"")
             .map_err(|_| Cow::Borrowed("expected a string (enclosed in quotes)"))?;
         let mut chars = Vec::new();
         while self.atoken("\"").is_err() {
+            let pos = self.pos;
             let escaped = self.atoken("\\").is_ok();
             let c = self.peek().ok_or(Cow::Borrowed("missing closing '\"'"))?;
             match (escaped, c) {
@@ -88,6 +100,7 @@ impl<'a> Parser<'a> {
                     chars.push(c);
                     self.advance();
                 }
+                (true, 'u') => chars.push(self.unicode_escape().inspect_err(|_| self.pos = pos)?),
                 (true, c) => return Err(format!("\\'{c}' is not a valid escape").into()),
             };
         }
