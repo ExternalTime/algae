@@ -209,7 +209,7 @@ pub fn parse(
 ) -> std::result::Result<(Option<[char; 30]>, HashMap<[char; 2], u64>), impl std::fmt::Display> {
     let mut parser = Parser {
         str,
-        pos: Position { line: 0, offset: 0 },
+        pos: Position { line: 1, offset: 0 },
     };
     parser
         .parse()
