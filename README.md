@@ -19,7 +19,7 @@ super bad, but don't expect more.
 With cargo:
 
 ```sh
-cargo run -- --precalculated --file monkeyracer_sfbs.json --cutoff 0.006
+cargo run --release -- --precalculated --file monkeyracer_sfbs.json --cutoff 0.006
 ```
 
 Without `--file` the weights / corpus is loaded through stdio. Without
