@@ -54,7 +54,8 @@ fn parse_args() -> Result<Args, Box<dyn Error>> {
     })
 }
 
-fn generate(args: Args) -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), Box<dyn Error>> {
+    let args = parse_args()?;
     if args.alphabet.is_none() && !args.precalculated {
         return Err("missing alphabet".into());
     }
@@ -77,11 +78,6 @@ fn generate(args: Args) -> Result<(), Box<dyn Error>> {
             });
         }
     }
+    println!("finished");
     Ok(())
-}
-
-fn main() {
-    if let Err(e) = parse_args().and_then(generate) {
-        println!("{e}");
-    }
 }

@@ -3,12 +3,16 @@
 Logical keyboard layout generator. Finds *all* keyboard layouts (or rather sets
 of columns) with (d)sfbs below a chosen threshold. For low thresholds does its
 job nearly instantly. Should work well as a way to filter out layouts on which
-to run slower analyzers (for example ones that use (d)sfb distance instead).
+to run slower analyzers. Ones that could for example take sfb distance into
+account and make sure sane pinky columns exist.
 
 This is hopefully last rewrite of my generator. This time I cut everything I
 could out of it. I could have made it shorter, but I've decided to also try
 using 0 dependencies, which came out surprisingly well (did not result in
 a disaster).
+
+Edit: started adding basic dependencies back. While my own parser worked the
+code was pretty bad. Replaced it with serde_json instead.
 
 While this generator *can* calculate weights of bigrams by itself, I strongly
 recommend supplying your own weights. I made sure the calculated weights aren't
